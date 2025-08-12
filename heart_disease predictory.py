@@ -27,6 +27,21 @@ except ImportError:
 
 warnings.filterwarnings('ignore')
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, roc_curve, auc, precision_recall_curve
+
+# ---- Global Plot Settings ----
+plt.rcParams['font.family'] = 'DejaVu Sans'  # Clean English font
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
+plt.rcParams['legend.fontsize'] = 10
+plt.rcParams['figure.figsize'] = (8, 6)
+sns.set_style("whitegrid")
+
+
 # Set up matplotlib for better plots
 plt.rcParams['figure.figsize'] = (8, 6)
 plt.rcParams['font.size'] = 8
@@ -605,6 +620,35 @@ class HeartDiseasePredictor:
         
         print("\n📊 MODEL EVALUATION AND COMPARISON")
         print("-" * 45)
+
+        # Hyperparameter tuning for Random Forest (moved inside the method)
+        from sklearn.model_selection import RandomizedSearchCV
+        
+        # Define parameter grid for Random Forest
+        param_dist = {
+            'n_estimators': [100, 200, 300, 500],
+            'max_depth': [None, 10, 20, 30],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'bootstrap': [True, False]
+        }
+
+        # Initialize Random Forest
+        rf = RandomForestClassifier(random_state=42)
+
+        # Randomized Search
+        rf_random = RandomizedSearchCV(estimator=rf, param_distributions=param_dist,
+                                        n_iter=20, cv=5, verbose=2, random_state=42, n_jobs=-1)
+
+        # Fit the model
+        rf_random.fit(self.X_train_scaled, self.y_train)
+
+        print("Best Parameters for Random Forest:", rf_random.best_params_)
+        best_rf = rf_random.best_estimator_
+
+        # Evaluate best model
+        y_pred_best_rf = best_rf.predict(self.X_test_scaled)
+        print("Accuracy after tuning:", accuracy_score(self.y_test, y_pred_best_rf))
         
         # Create results comparison DataFrame
         results_df = pd.DataFrame(self.results).T
@@ -847,6 +891,50 @@ class HeartDiseasePredictor:
         print("=" * 60)
         
         return True
+
+def evaluate_model(model, X_test, y_test):
+    """
+    Evaluate a single model with detailed metrics and visualizations
+    """
+    from sklearn.metrics import roc_curve
+    
+    y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)[:, 1]  # For AUC-ROC
+
+    # Calculate metrics
+    acc = accuracy_score(y_test, y_pred)
+    prec = precision_score(y_test, y_pred)
+    rec = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    auc = roc_auc_score(y_test, y_prob)
+
+    print(f"Accuracy: {acc:.2f}")
+    print(f"Precision: {prec:.2f}")
+    print(f"Recall: {rec:.2f}")
+    print(f"F1-score: {f1:.2f}")
+    print(f"AUC-ROC: {auc:.2f}")
+
+    # Plot Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(5,4))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", 
+               xticklabels=["No Disease", "Disease"], 
+               yticklabels=["No Disease", "Disease"])
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.title("Confusion Matrix")
+    plt.show()
+
+    # Plot ROC Curve
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    plt.figure(figsize=(5,4))
+    plt.plot(fpr, tpr, label=f"AUC = {auc:.2f}")
+    plt.plot([0,1], [0,1], linestyle="--", color="red")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve")
+    plt.legend()
+    plt.show()
 
 # ========================================
 # USAGE EXAMPLE AND TUTORIAL
